@@ -299,6 +299,8 @@ class Bilibili():
 
     def get_video_urls(self, aid, page, vtype):    # switched over to biliplus api for getting the direct video links
         code = self.vtype_code(aid, page, vtype)
+        # if code not in [0, 1, 2, None]:
+        #     return [self.get_biliplus_video_url(code)]
         url = BILIPLUS_GETURL_URL.format(str(aid), page, str(code))
         xml = utils.get_page_content(url)
         try:
@@ -309,7 +311,7 @@ class Bilibili():
             xbmc.executebuiltin('Notification(BiliPlus API Error,Something\'s wrong. Retry later.,5000)')
             time.sleep(5)
             return []
-        maximum_quality = '720' # '1080' for 1080p, '720' for 720p, '480' for 480p, etc.
+        maximum_quality = 720 # 1080, 720, 480, 360, 240
         data = result['data']
         for x in data:
             x['quality'] = int(re.search('x(\d+)', x['info']).group(1))
@@ -342,11 +344,22 @@ class Bilibili():
                 xbmc.log('---------------'+xml, xbmc.LOGWARNING)
                 xbmc.executebuiltin('Notification(BiliPlus API Error,Something\'s wrong. Retry later.,5000)')
                 time.sleep(5)
-                return
+                return None
+            # if result['v2_app_api']['rights']['pay'] == 1:
+            #     for item in result['v2_app_api']['pages']:
+            #         if item['page'] == 1:
+            #             return int(re.search('(\d+).xml',item['dmlink']).group(1))
             for item in result['v2_app_api']['pages']:
                 if item['page'] == int(page):
                     return self.vtype_code(aid, page, item['from'])
-        return 0
+        return None
+
+    # def get_biliplus_video_url(self, cid):
+    #     url = BILIPLUS_PLAYURL_URL.format(str(cid))
+    #     xml = utils.get_page_content(url)
+    #     xbmc.log('---------------'+xml, xbmc.LOGWARNING)
+    #     return re.search('<a href="([^"]*)', xml).group(1)
+
 
     # def add_history(self, aid, cid):
     #     url = ADD_HISTORY_URL.format(str(cid), str(aid))

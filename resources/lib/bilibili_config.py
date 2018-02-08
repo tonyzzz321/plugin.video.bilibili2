@@ -38,6 +38,7 @@ ATTENTION_VIDEO_URL = SPACE_SUBDOMAIN + '/ajax/member/getSubmitVideos?mid={}&pag
 
 BILIPLUS_VIEW_URL = BILIPLUS_API_URL + '/view?update=1&id={}'
 BILIPLUS_GETURL_URL = BILIPLUS_API_URL + '/geturl?update=1&av={}&page={}&bangumi={}'
+# BILIPLUS_PLAYURL_URL = BILIPLUS_API_URL + '/video_playurl?cid={}&type=mp4'
 
 # INTERFACE_URL = INTERFACE_SUBDOMAIN + r'/playurl?cid={}&from=miniplay&player=1&sign={}'
 # INTERFACE_PARAMS = r'cid={}&from=miniplay&player=1{}'
