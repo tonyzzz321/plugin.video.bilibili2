@@ -12,13 +12,18 @@ def _get_zlib_content(content):
     page_content = zlib.decompress(content)
     return page_content
 
-def get_page_content(page_full_url, data = None, headers = {}):
+def get_page_content(page_full_url, data = None, headers = {}, http_proxy = None):
     try:
         ua = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:6.0.2) Gecko/20100101 Firefox/6.0.2'}
         ua.update(headers)
         req = urllib2.Request(page_full_url, headers=ua, data = data)
         print (req.headers.items())
-        response = urllib2.urlopen(req)
+        if http_proxy == None:
+            response = urllib2.urlopen(req)
+        else:
+            proxy = urllib2.ProxyHandler({'http': http_proxy})
+            opener = urllib2.build_opener(proxy)
+            response = opener.open(req)
         print(response.info())
         if response.headers.get('content-encoding', '') == 'gzip':
             return _get_gzip_content(response.read())

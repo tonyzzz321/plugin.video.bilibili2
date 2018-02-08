@@ -1,8 +1,7 @@
 #coding=utf-8
 from xbmcswift2 import Plugin, xbmc, xbmcgui
 from resources.lib.bilibili import Bilibili
-import time
-import string, random, os
+import string, random, os, json, re, time
 
 try:
     from resources.lib.login_dialog import LoginDialog
@@ -34,14 +33,14 @@ def get_av_item(aid, **kwargs):
     item = dict(**kwargs)
     if len(result) == 1:
         item['is_playable'] = True
-        item['path'] = plugin.url_for('play', cid = result[0]['cid'])
+        item['path'] = plugin.url_for('play', aid = aid, page = 1, vtype = 'null')
     else:
-        item['path'] = plugin.url_for('list_video', aid = aid)
+        item['path'] = plugin.url_for('list_video', aid = aid, v_info = json.dumps(item))
     return item
 
-@plugin.route('/play/<cid>/')
-def play(cid):
-    urls = bilibili.get_video_urls(cid)
+@plugin.route('/play/<aid>/<page>/<vtype>/')
+def play(aid, page, vtype):
+    urls = bilibili.get_video_urls(aid, page, vtype)
     for i in range(len(urls)):
         urls[i] = urls[i] + '|Referer=http://www.bilibili.com/'
     if (len(urls) > 1):
@@ -49,22 +48,27 @@ def play(cid):
     else:
         plugin.set_resolved_url(urls[0])
 
-@plugin.route('/list_video/<aid>/')
-def list_video(aid):
+@plugin.route('/list_video/<aid>/<v_info>/')
+def list_video(aid, v_info):
     plugin.set_content('videos')
-    result = bilibili.get_av_list(aid)
+    result = bilibili.get_av_pages_info(aid)
     items = []
-    for  item in result:
+    for item in result:
+        v_result = json.loads(v_info)
+        v_result['info']['duration'] =  item['duration']
+        label = item['part'] if (item['part'] != '') else v_result['label']
         items.append({
-            'label': item['pagename'], 
-            'path': plugin.url_for('play', cid = item['cid']),
+            'label': label, 
+            'thumbnail': v_result['thumbnail'],
+            'info': v_result['info'],
+            'path': plugin.url_for('play', aid = aid, page = item['page'], vtype = item['from']),
             'is_playable': True,
             })
     return items
 
-@plugin.route('/search/')
-def search():
-    return []
+# @plugin.route('/search/')
+# def search():
+#     return []
 
 @plugin.route('/dynamic/<page>/')
 def dynamic(page):
@@ -87,7 +91,6 @@ def dynamic(page):
         except:
             pass
         items.append(get_av_item(item['addition']['aid'], label = item['addition']['title'], thumbnail = item['addition']['pic'], info = info))
-
     items += next_page('dynamic', page, total_page)
     return items
 
@@ -123,17 +126,17 @@ def fav(fav_box, page):
     items += next_page('fav', page, total_page, fav_box = fav_box)
     return items
 
-@plugin.route('/season/<season_id>/')
-def season(season_id):
+@plugin.route('/season/<bangumi_info>/')
+def season(bangumi_info):
     plugin.set_content('videos')
-    result = bilibili.get_bangumi_detail(season_id)
+    result = json.loads(bangumi_info)
     items = []
     bangumi_info = {
-        'genre': '|'.join([tag['tag_name'] for tag in result['tags']]),
+        'genre': map((lambda x: x['tag_name']), result['tags']),
         'episode': len(result['episodes']),
-        'castandrole': [u'{}|{}'.format(actor['actor'], actor['role']) for actor in result['actor']],
+        'castandrole': [(actor['actor'], actor['role']) for actor in result['actor']],
         'director': result['staff'],
-        'plot': result['evaluate'],
+        'plot': result['bangumi_title'] + ' ' + result['season_title'] + '\n\n' + result['evaluate'],
         }
     for item in result['episodes']:
         info = dict(bangumi_info)
@@ -145,7 +148,47 @@ def season(season_id):
         title += item['index_title']
         if item.get('is_new', '0') == '1':
             title += u'【新】'
-        items.append(get_av_item(item['av_id'], label = title, thumbnail = item['cover'], info = info))
+        items.append({
+            'is_playable': True,
+            'path': plugin.url_for('play', aid = item['av_id'], page = item['page'], vtype = 'null'),
+            'label': title,
+            'thumbnail': item['cover'],
+            'info': info
+            })
+    return items
+
+def get_bangumi_item(season_id, **kwargs):
+    result = bilibili.get_bangumi_detail(season_id)
+    item = dict(**kwargs)
+    if len(result['seasons']) == 0:
+        item['path'] = plugin.url_for('season', bangumi_info = json.dumps(result))
+    else:
+        item['path'] = plugin.url_for('list_season', bangumi_info = json.dumps(result), ignore_seasons = '0')
+    return item
+
+@plugin.route('/list_season/<bangumi_info>/<ignore_seasons>/')
+def list_season(bangumi_info, ignore_seasons):
+    result = json.loads(bangumi_info)
+    items = []
+    info = {
+        'plot': result['bangumi_title'] + ' ' + result['season_title'] + '\n\n' + result['evaluate'],  
+        }
+    title = result['bangumi_title'] + ' ' + result['season_title']
+    if result['is_finish'] == 0:
+        title += u'【更新至第{0}集】'.format(result['newest_ep_index'])
+    else:
+        title += u'【已完结】'
+    items.append({
+        'label': title,
+        'path': plugin.url_for('season', bangumi_info = bangumi_info),
+        'thumbnail': result['cover'],
+        'info': info
+        })
+    if int(ignore_seasons) == 0:
+        for item in result['seasons']:
+            b_info = json.dumps(bilibili.get_bangumi_detail(item['season_id']))
+            b_items = list_season(b_info, ignore_seasons = 1)
+            items.append(b_items[0])
     return items
 
 @plugin.route('/bangumi_chase/<page>/')
@@ -162,12 +205,7 @@ def bangumi_chase(page):
             title += u'【更新至第{0}集】'.format(item['newest_ep_index'])
         else:
             title += u'【已完结】'
-        items.append({
-            'label': title,
-            'path': plugin.url_for('season', season_id = item['season_id']),
-            'thumbnail': item['cover'],
-            'info': info,
-            })
+        items.append(get_bangumi_item(item['season_id'], label = title, thumbnail = item['cover'], info = info))
     items += next_page('bangumi_chase', page, total_page)
     return items
 
@@ -193,59 +231,66 @@ def attention_video(mid, tid, page):
             info['genre'] = bilibili.get_category_name(item['typeid'])
         except:
             pass
+        if item['pic'][:4] != 'http':
+            item['pic'] = 'http://' + item['pic']
         items.append(get_av_item(item['aid'], label = item['title'], thumbnail = item['pic'], info = info))
     items += next_page('attention_video', page, total_page, mid = mid, tid = tid)
     return items 
 
-@plugin.route('/attention_channel_list/<mid>/<cid>/<page>/')
-def attention_channel_list(mid, cid, page):
-    plugin.set_content('videos')
-    result, total_page = bilibili.get_attention_channel_list(mid, cid, page)
-    items = []
-    for item in result:
-        info = {
-            'genre': item['info']['tname'],
-            'plot': item['info']['desc'],
-            'duration': item['info']['duration'],
-            }
-        try:
-            info['year'] = int(time.strftime('%Y',time.localtime(item['info']['ctime'])))
-        except:
-            pass
-        items.append(get_av_item(item['info']['aid'], label = item['info']['title'], thumbnail = item['info']['pic'], info = info))
-    items += next_page('attention_channel_list', page, total_page, mid = mid, cid = cid)
-    return items 
+# @plugin.route('/attention_channel_list/<mid>/<cid>/<page>/')
+# def attention_channel_list(mid, cid, page):
+#     plugin.set_content('videos')
+#     result, total_page = bilibili.get_attention_channel_list(mid, cid, page)
+#     items = []
+#     for item in result:
+#         info = {
+#             'genre': item['info']['tname'],
+#             'plot': item['info']['desc'],
+#             'duration': item['info']['duration'],
+#             }
+#         try:
+#             info['year'] = int(time.strftime('%Y',time.localtime(item['info']['ctime'])))
+#         except:
+#             pass
+#         items.append(get_av_item(item['info']['aid'], label = item['info']['title'], thumbnail = item['info']['pic'], info = info))
+#     items += next_page('attention_channel_list', page, total_page, mid = mid, cid = cid)
+#     return items 
 
-@plugin.route('/attention_channel/<mid>/')
-def attention_channel(mid):
-    result = bilibili.get_attention_channel(mid)
-    items = []
-    for item in result:
-        title = u'{} ({}个视频) ({}更新)'.format(item['name'], str(item['count']), item['modify_time'][:10])
-        items.append({
-            'label': title,
-            'path': plugin.url_for('attention_channel_list', mid = mid, cid = item['id'], page = '1'),
-            })
-    return items
+# @plugin.route('/attention_channel/<mid>/')
+# def attention_channel(mid):
+#     result = bilibili.get_attention_channel(mid)
+#     items = []
+#     for item in result:
+#         title = u'{} ({}个视频) ({}更新)'.format(item['name'], str(item['count']), item['modify_time'][:10])
+#         items.append({
+#             'label': title,
+#             'path': plugin.url_for('attention_channel_list', mid = mid, cid = item['id'], page = '1'),
+#             })
+#     return items
 
-@plugin.route('/user_info/<mid>/')
-def user_info(mid):
+@plugin.route('/user_info/<mid>/<thumbnail>/<info>/')
+def user_info(mid, thumbnail, info):
+    info = json.loads(info)
     result, total_page = bilibili.get_attention_video(mid, 0, 1, 1)
     items = []
-    items.append({
-        'label': u'频道',
-        'path': plugin.url_for('attention_channel', mid = mid),
-        })
+    # items.append({
+    #     'label': u'频道',
+    #     'path': plugin.url_for('attention_channel', mid = mid),
+    #     })
     title = u'{} ({}个视频)'.format(u'全部', str(result['count']))
     items.append({
         'label': title,
         'path': plugin.url_for('attention_video', mid = mid, tid = '0', page = '1'),
+        'thumbnail': thumbnail,
+        'info': info
         })
     for item in result['tlist'].values():
         title = u'{} ({}个视频)'.format(item['name'], str(item['count']))
         items.append({
             'label': title,
             'path': plugin.url_for('attention_video', mid = mid, tid = item['tid'], page = '1'),
+            'thumbnail': thumbnail,
+            'info': info
             })
     return items
 
@@ -254,10 +299,14 @@ def attention(page):
     result, total_page = bilibili.get_attention(page)
     items = []
     for item in result:
+        info = {
+            'plot': item['uname'] + '\n\n' + item['sign'],
+            }
         items.append({
             'label': item['uname'],
-            'path': plugin.url_for('user_info', mid = item['fid']),
+            'path': plugin.url_for('user_info', mid = item['mid'], thumbnail = item['face'], info = json.dumps(info)),
             'thumbnail': item['face'],
+            'info': info
             })
     items += next_page('attention', page, total_page)
     return items
@@ -268,25 +317,26 @@ def login():
         username=plugin.addon.getSetting('username')
         password=plugin.addon.getSetting('password')
         if username=='' or password=='':
-            plugin.notify('请设置用户名密码', delay=2000)
+            plugin.notify('请设置用户名密码', delay=5000)
             plugin.addon.openSettings()
             username=plugin.addon.getSetting('username')
             password=plugin.addon.getSetting('password')
             if username=='' or password=='':
-                plugin.notify('用户名或密码为空', delay=2000)
+                plugin.notify('用户名或密码为空', delay=5000)
                 return
         filename = tempdir + ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10)) + '.jpg'
         captcha = LoginDialog(captcha = bilibili.get_captcha(filename)).get()
         os.remove(filename)
         result, msg = bilibili.login(username, password, captcha)
         if result == True:
-            plugin.notify('登陆成功', delay=2000)
+            plugin.notify('登陆成功，请重新运行插件', delay=5000)
         else:
-            plugin.notify(msg, delay=2000)
+            plugin.notify(msg, delay=5000)
 
 @plugin.route('/logout/')
 def logout():
     bilibili.logout()
+    plugin.notify('登出成功，请重新运行插件', delay=5000)
 
 @plugin.route('/history/<page>/')
 def history(page):
@@ -308,67 +358,112 @@ def history(page):
     items += next_page('history', page, total_page)
     return items
 
-@plugin.route('/timeline/')
-def timeline():
-    return []
+# @plugin.route('/category/<tid>/')
+# def category(tid):
+#     items = []
+#     for data in bilibili.get_category(tid):
+#         tid = data.keys()[0]
+#         value = data.values()[0]
+#         if len(value['subs']) == 0:
+#             path = plugin.url_for('category_order', tid = tid)
+#         else:
+#             path = plugin.url_for('category', tid = tid)
+#         items.append({'label': value['title'].decode('utf-8'), 'path': path})
+#     return items
 
-@plugin.route('/category/<tid>/')
-def category(tid):
-    items = []
-    for data in bilibili.get_category(tid):
-        tid = data.keys()[0]
-        value = data.values()[0]
-        if len(value['subs']) == 0:
-            path = plugin.url_for('category_order', tid = tid)
-        else:
-            path = plugin.url_for('category', tid = tid)
-        items.append({'label': value['title'].decode('utf-8'), 'path': path})
-    return items
+# @plugin.route('/category_order/<tid>')
+# def category_order(tid):
+#     items = [{
+#         'label': item['title'], 
+#         'path': plugin.url_for('category_list', page = '1', order = item['value'], tid = tid, days = item['days'])
+#         } for item in bilibili.get_order()]
+#     return items
 
-@plugin.route('/category_order/<tid>')
-def category_order(tid):
-    items = [{
-        'label': item['title'], 
-        'path': plugin.url_for('category_list', page = '1', order = item['value'], tid = tid, days = item['days'])
-        } for item in bilibili.get_order()]
-    return items
+# @plugin.route('/category_list/<page>/<order>/<tid>/<days>/')
+# def category_list(order, tid, page, days):
+#     plugin.set_content('videos')
+#     result, total_page = bilibili.get_category_list(tid = tid, order = order, page = page, days = days)
+#     items = previous_page('category_list', page, total_page, order = order, tid = tid, days = days)
+#     items = []
+#     for item in result:
+#         duration = 0
+#         for t in item['duration'].split(':'):
+#             duration = duration * 60 + int(t)
+#         info = {
+#             'genre': item['typename'],
+#             'writer': item['author'],
+#             'plot': item['description'],
+#             'duration': duration,
+#             }
+#         try:
+#             info['year'] = int(item['create'][:4])
+#         except:
+#             pass
 
-@plugin.route('/category_list/<page>/<order>/<tid>/<days>/')
-def category_list(order, tid, page, days):
+#         items.append(get_av_item(item['aid'], label = item['title'], thumbnail = item['pic'], info = info))
+#     items += next_page('category_list', page, total_page, order = order, tid = tid, days = days)
+#     return items
+
+@plugin.route('/watch_later/<page>/')
+def watch_later(page):
     plugin.set_content('videos')
-    result, total_page = bilibili.get_category_list(tid = tid, order = order, page = page, days = days)
-    items = previous_page('category_list', page, total_page, order = order, tid = tid, days = days)
+    result, total_page = bilibili.get_watch_later(page)
     items = []
     for item in result:
-        duration = 0
-        for t in item['duration'].split(':'):
-            duration = duration * 60 + int(t)
         info = {
-            'genre': item['typename'],
-            'writer': item['author'],
-            'plot': item['description'],
-            'duration': duration,
+            'genre': item['tname'],
+            'writer': item['owner']['name'],
+            'plot': item['desc'],
+            'duration': item['duration']
             }
         try:
-            info['year'] = int(item['create'][:4])
+            info['year'] = int(time.strftime('%Y',time.localtime(item['ctime'])))
         except:
             pass
-
         items.append(get_av_item(item['aid'], label = item['title'], thumbnail = item['pic'], info = info))
-    items += next_page('category_list', page, total_page, order = order, tid = tid, days = days)
+    items += next_page('watch_later', page, total_page)
     return items
+
+@plugin.route('/av_num/')
+def av_num():
+    plugin.set_content('videos')
+    kb = xbmc.Keyboard('', u'输入AV号'.encode('utf-8'), False)
+    kb.doModal()
+    if kb.isConfirmed():
+        aid_input = kb.getText()
+        try:
+            aid = re.search('\d{6,8}', aid_input).group(0)
+        except:
+            plugin.notify('无效AV号，请重试', delay=5000)
+            return None
+        result = bilibili.get_av_detail(aid)
+        info = {
+            'genre': result['typename'],
+            'writer': result['author'],
+            'plot': result['title'] + '\n\n' + result['description'],
+            'duration': 0
+            }
+        v_info = {
+            'label': result['title'],
+            'thumbnail': result['pic'],
+            'info': info
+            }
+        return list_video(aid, json.dumps(v_info))
+
 
 @plugin.route('/')
 def root():
     items = [
-        #{'label': u'搜索(暂不支持)', 'path': plugin.url_for('search')},
-        {'label': u'视频分类', 'path': plugin.url_for('category', tid = '0')},
-    ]
+        # {'label': u'搜索(暂不支持)', 'path': plugin.url_for('search')},
+        {'label': u'输入AV号', 'path': plugin.url_for('av_num')},
+        # {'label': u'视频分类(暂不支持)', 'path': plugin.url_for('category', tid = '0')},
+        ]
     if bilibili.is_login:
         items += [
             {'label': u'我的动态', 'path': plugin.url_for('dynamic', page = '1')},
             {'label': u'我的历史', 'path': plugin.url_for('history', page = '1')},
             {'label': u'我的收藏', 'path': plugin.url_for('fav_box')},
+            {'label': u'稍后观看', 'path': plugin.url_for('watch_later', page = '1')},
             {'label': u'我的追番', 'path': plugin.url_for('bangumi_chase', page = '1')},
             {'label': u'我的关注', 'path': plugin.url_for('attention', page = '1')},
             {'label': u'退出登陆', 'path': plugin.url_for('logout')},
