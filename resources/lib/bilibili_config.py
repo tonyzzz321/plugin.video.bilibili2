@@ -28,7 +28,7 @@ FAV_URL = SPACE_SUBDOMAIN + '/ajax/fav/getList?mid={}&page={}&pagesize={}&fid={}
 # MY_INFO_URL = SPACE_SUBDOMAIN + '/ajax/member/MyInfo'
 AV_URL = WWW_SUBDOMAIN + '/widget/getPageList?aid={}'
 BANGUMI_CHASE_URL = SPACE_SUBDOMAIN + '/ajax/Bangumi/getList?mid={}&page={}&pagesize={}'
-BANGUMI_SEASON_URL = BANGUMI_SUBDOMAIN + '/jsonp/seasoninfo/{}.ver?callback=seasonListCallback&jsonp=jsonp&_={}'
+# BANGUMI_SEASON_URL = BANGUMI_SUBDOMAIN + '/jsonp/seasoninfo/{}.ver?callback=seasonListCallback&jsonp=jsonp&_={}'
 ATTENTION_URL = API_SUBDOMAIN + '/x/relation/followings?vmid={}&pn={}&ps={}&order=uname&jsonp=jsonp'
 STAT_URL = API_SUBDOMAIN + '/x/relation/stat?vmid={}&jsonp=jsonp'
 ATTENTION_VIDEO_URL = SPACE_SUBDOMAIN + '/ajax/member/getSubmitVideos?mid={}&page={}&pagesize={}&tid={}'
@@ -38,6 +38,7 @@ ATTENTION_VIDEO_URL = SPACE_SUBDOMAIN + '/ajax/member/getSubmitVideos?mid={}&pag
 
 BILIPLUS_VIEW_URL = BILIPLUS_API_URL + '/view?update=1&id={}'
 BILIPLUS_GETURL_URL = BILIPLUS_API_URL + '/geturl?update=1&av={}&page={}&bangumi={}'
+BILIPLUS_BANGUMI_URL = BILIPLUS_API_URL + '/bangumi?season={}'
 # BILIPLUS_PLAYURL_URL = BILIPLUS_API_URL + '/video_playurl?cid={}&type=mp4'
 
 # INTERFACE_URL = INTERFACE_SUBDOMAIN + r'/playurl?cid={}&from=miniplay&player=1&sign={}'

@@ -158,13 +158,14 @@ class Bilibili():
         return result['data']['result'], result['data']['pages']
 
     def get_bangumi_detail(self, season_id):
-        url = BANGUMI_SEASON_URL.format(season_id, int(time.time() * 1000))
+        url = BILIPLUS_BANGUMI_URL.format(season_id)
         result = utils.get_page_content(url)
         xbmc.log('---------------'+json.dumps(result), xbmc.LOGWARNING)
-        if result[0] != '{':
-            start = result.find('(') + 1
-            end = result.find(');')
-            result = result[start:end]
+        xbmc.log('---------------from season id: '+str(season_id), xbmc.LOGWARNING)
+        # if result[0] != '{':
+        #     start = result.find('(') + 1
+        #     end = result.find(');')
+        #     result = result[start:end]
         result = json.loads(result)
         return result['result']
 
