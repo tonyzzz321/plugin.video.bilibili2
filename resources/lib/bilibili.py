@@ -279,11 +279,18 @@ class Bilibili():
         xbmc.log('---------------'+json.dumps(result), xbmc.LOGWARNING)
         return result
 
-    def get_av_list(self, aid):
-        url = AV_URL.format(aid)
+    # def get_av_list(self, aid):
+    #     url = AV_URL.format(aid)
+    #     xbmc.log('#######AVID######'+str(aid), xbmc.LOGWARNING)
+    #     result = json.loads(utils.get_page_content(url))
+    #     xbmc.log('---------------'+json.dumps(result), xbmc.LOGWARNING)
+    #     return result
+
+    def get_page_number(self, aid):
+        url = BILIPLUS_VIEW_URL.format(aid)
         result = json.loads(utils.get_page_content(url))
         xbmc.log('---------------'+json.dumps(result), xbmc.LOGWARNING)
-        return result
+        return len(result['list'])
 
     def get_av_pages_info(self, aid):
         url = BILIPLUS_VIEW_URL.format(str(aid))
